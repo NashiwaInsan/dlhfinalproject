@@ -1,0 +1,79 @@
+# =====================================================================
+# Jalankan dari folder ini:  docker compose up -d
+# Service yang dinyalakan:
+#   - sqlserver      : SQL Server 2022 (sumber data online)
+#   - sqlserver_init : restore AdventureWorks2025.bak + buat tabel stream
+#   - marketplace_db : PostgreSQL 15 (penyimpanan ulasan)
+#   - pgadmin        : UI untuk inspeksi Postgres (port 5050)
+#   - marketplace_api: FastAPI penerima ulasan (port 8000)
+# =====================================================================
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    container_name: aw_sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${MSSQL_PASSWORD}"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+      # Taruh file AdventureWorks2025.bak ke folder ./sqlserver/backup/
+      - ./sqlserver/backup:/var/opt/mssql/backup
+
+  # Container sekali-jalan: menunggu SQL Server siap lalu me-restore .bak
+  sqlserver_init:
+    image: mcr.microsoft.com/mssql-tools
+    container_name: aw_sqlserver_init
+    depends_on:
+      - sqlserver
+    environment:
+      MSSQL_PASSWORD: "${MSSQL_PASSWORD}"
+      MSSQL_DATABASE: "${MSSQL_DATABASE}"
+    volumes:
+      - ./sqlserver:/init
+    entrypoint: ["/bin/bash", "/init/restore.sh"]
+
+  marketplace_db:
+    image: postgres:15-alpine
+    container_name: aw_marketplace_db
+    environment:
+      POSTGRES_DB: "${PG_DB}"
+      POSTGRES_USER: "${PG_USER}"
+      POSTGRES_PASSWORD: "${PG_PASSWORD}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: aw_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - marketplace_db
+
+  marketplace_api:
+    build: ../marketplace_api
+    container_name: aw_marketplace_api
+    environment:
+      PG_HOST: marketplace_db
+      PG_PORT: "5432"
+      PG_DB: "${PG_DB}"
+      PG_USER: "${PG_USER}"
+      PG_PASSWORD: "${PG_PASSWORD}"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - marketplace_db
+
+volumes:
+  mssql_data:
+  pg_data:

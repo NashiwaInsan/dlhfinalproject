@@ -1,0 +1,31 @@
+# ===== Rahasia / environment =====
+.env
+
+# ===== Data hasil generate (JANGAN di-commit) =====
+# Repo berisi KODE, bukan DATA penuh. Tiap anggota generate datanya sendiri
+# kalau perlu data lengkap; tapi sample_data/ DIKECUALIKAN (lihat di bawah)
+# supaya Anggota 2 & 3 bisa develop/test tanpa install Docker.
+watched/excel/*.xlsx
+lake/
+warehouse/
+*.duckdb
+state/watermark.json
+
+# Sample data KECIL untuk development tim — TETAP di-commit, jangan ikut diabaikan
+!sample_data/
+!sample_data/**
+
+# ===== File backup database (terlalu besar untuk git) =====
+docker/sqlserver/backup/*.bak
+
+# ===== Python =====
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ===== OS / editor =====
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

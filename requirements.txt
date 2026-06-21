@@ -1,0 +1,8 @@
+# Dependensi untuk bagian Anggota 1 (faker daemons).
+# Anggota 2 & 3 akan menambah dependensi mereka sendiri
+# (pyarrow, nltk, duckdb, dll) saat menulis ETL.
+pandas
+openpyxl
+requests
+pymssql
+python-dotenv
