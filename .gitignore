@@ -6,7 +6,6 @@
 # kalau perlu data lengkap; tapi sample_data/ DIKECUALIKAN (lihat di bawah)
 # supaya Anggota 2 & 3 bisa develop/test tanpa install Docker.
 watched/excel/*.xlsx
-lake/
 warehouse/
 *.duckdb
 state/watermark.json
