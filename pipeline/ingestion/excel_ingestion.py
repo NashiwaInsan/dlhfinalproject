@@ -9,7 +9,6 @@ from pipeline.state_manager import (
 
 
 def ingest_store_sales():
-
     state = load_watermark()
 
     watermark = state["store_excel"]

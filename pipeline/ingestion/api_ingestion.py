@@ -9,7 +9,6 @@ from pipeline.state_manager import (
 
 
 def ingest_reviews():
-
     state = load_watermark()
 
     watermark = state["reviews"]
@@ -60,8 +59,6 @@ def ingest_reviews():
     state["reviews"] = latest_watermark
 
     save_watermark(state)
-
     print(
         f"{len(df)} review berhasil diproses"
     )
-```

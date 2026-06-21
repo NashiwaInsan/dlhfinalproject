@@ -112,7 +112,6 @@ def ingest_online_sales():
     )
 
     state["sales_online"] = latest_watermark
-
     save_watermark(state)
 
     # =====================================================

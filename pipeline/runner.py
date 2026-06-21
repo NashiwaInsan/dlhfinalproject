@@ -31,7 +31,6 @@ def run():
     ingest_online_sales()
 
     ingest_store_sales()
-
     ingest_reviews()
 
     print("\n")
@@ -41,9 +40,7 @@ def run():
     print("=" * 50)
 
     clean_online_sales()
-
     clean_store_sales()
-
     clean_reviews()
 
     print("\n")
