@@ -1,5 +1,6 @@
+```python
 from pipeline.ingestion.sql_ingestion import (
-    ingest_sales
+    ingest_online_sales
 )
 
 from pipeline.ingestion.api_ingestion import (
@@ -7,11 +8,12 @@ from pipeline.ingestion.api_ingestion import (
 )
 
 from pipeline.ingestion.excel_ingestion import (
-    ingest_excel
+    ingest_store_sales
 )
 
 from pipeline.silver.cleaning import (
-    clean_sales,
+    clean_online_sales,
+    clean_store_sales,
     clean_reviews
 )
 
@@ -19,37 +21,46 @@ from pipeline.silver.sentiment import (
     sentiment_reviews
 )
 
-import glob
-
 
 def run():
 
-    ingest_sales()
+    print("=" * 50)
+    print("INGESTION LAYER")
+    print("=" * 50)
+
+    ingest_online_sales()
+
+    ingest_store_sales()
 
     ingest_reviews()
 
-    ingest_excel()
+    print("\n")
 
-    sales_files = glob.glob(
-        "lake/bronze/sales/*.parquet"
-    )
+    print("=" * 50)
+    print("SILVER LAYER")
+    print("=" * 50)
 
-    review_files = glob.glob(
-        "lake/bronze/reviews/*.parquet"
-    )
+    clean_online_sales()
 
-    if sales_files:
-        clean_sales(
-            sales_files[-1]
-        )
+    clean_store_sales()
 
-    if review_files:
-        clean_reviews(
-            review_files[-1]
-        )
+    clean_reviews()
 
-        sentiment_reviews()
+    print("\n")
+
+    print("=" * 50)
+    print("SENTIMENT ANALYSIS")
+    print("=" * 50)
+
+    sentiment_reviews()
+
+    print("\n")
+
+    print("=" * 50)
+    print("PIPELINE SELESAI")
+    print("=" * 50)
 
 
 if __name__ == "__main__":
     run()
+```

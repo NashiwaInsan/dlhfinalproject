@@ -1,6 +1,4 @@
-import requests
 import pandas as pd
-
 from pathlib import Path
 from datetime import datetime
 
@@ -9,27 +7,32 @@ from pipeline.state_manager import (
     save_watermark
 )
 
-API_URL = "http://localhost:8000/reviews/latest"
-
 
 def ingest_reviews():
 
     state = load_watermark()
 
-    since = state["review_created_at"]
+    watermark = state["reviews"]
 
-    response = requests.get(
-        API_URL,
-        params={"since": since}
+    df = pd.read_json(
+        "sample_data/sample_reviews.json"
     )
 
-    reviews = response.json()
+    df["created_at"] = pd.to_datetime(
+        df["created_at"]
+    )
 
-    if len(reviews) == 0:
+    watermark_dt = pd.to_datetime(
+        watermark
+    )
+
+    df = df[
+        df["created_at"] > watermark_dt
+    ]
+
+    if df.empty:
         print("Tidak ada review baru")
         return
-
-    df = pd.DataFrame(reviews)
 
     Path(
         "lake/bronze/reviews"
@@ -48,12 +51,17 @@ def ingest_reviews():
         index=False
     )
 
-    state["review_created_at"] = (
-        df["created_at"].max()
+    latest_watermark = (
+        df["created_at"]
+        .max()
+        .isoformat()
     )
+
+    state["reviews"] = latest_watermark
 
     save_watermark(state)
 
     print(
-        f"{len(df)} review berhasil disimpan"
+        f"{len(df)} review berhasil diproses"
     )
+```

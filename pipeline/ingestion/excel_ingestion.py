@@ -1,58 +1,90 @@
-import os
-import shutil
-
+import pandas as pd
 from pathlib import Path
+from datetime import datetime
 
 from pipeline.state_manager import (
     load_watermark,
     save_watermark
 )
 
-WATCH_FOLDER = "watched"
 
-
-def ingest_excel():
+def ingest_store_sales():
 
     state = load_watermark()
 
-    processed = state["processed_excel_files"]
+    watermark = state["store_excel"]
+
+    watermark_dt = pd.to_datetime(
+        watermark,
+        utc=True
+    )
+
+    excel_folder = Path(
+        "sample_data/excel"
+    )
+
+    files = list(
+        excel_folder.glob("*.xlsx")
+    )
+
+    if not files:
+        print("Tidak ada file excel ditemukan")
+        return
+
+    all_data = []
+
+    for file in files:
+
+        df = pd.read_excel(file)
+
+        df["SaleDate"] = pd.to_datetime(
+            df["SaleDate"]
+        )
+
+        delta = df[
+            df["SaleDate"] > watermark_dt.tz_localize(None)
+        ]
+
+        if not delta.empty:
+            all_data.append(delta)
+
+    if not all_data:
+        print("Tidak ada store sales baru")
+        return
+
+    final_df = pd.concat(
+        all_data,
+        ignore_index=True
+    )
 
     Path(
-        "lake/bronze/excel"
+        "lake/bronze/store_sales"
     ).mkdir(
         parents=True,
         exist_ok=True
     )
 
-    files = [
-        f for f in os.listdir(WATCH_FOLDER)
-        if f.endswith(".xlsx")
-    ]
+    filename = (
+        f"lake/bronze/store_sales/"
+        f"store_sales_{datetime.now():%Y%m%d_%H%M%S}.parquet"
+    )
 
-    for file in files:
+    final_df.to_parquet(
+        filename,
+        index=False
+    )
 
-        if file in processed:
-            continue
+    latest_watermark = (
+        final_df["SaleDate"]
+        .max()
+        .isoformat()
+    )
 
-        src = os.path.join(
-            WATCH_FOLDER,
-            file
-        )
+    state["store_excel"] = latest_watermark
 
-        dst = os.path.join(
-            "lake/bronze/excel",
-            file
-        )
+    save_watermark(state)
 
-        shutil.copy(
-            src,
-            dst
-        )
-
-        processed.append(file)
-
-        print(f"{file} berhasil diproses")
-
-    state["processed_excel_files"] = processed
-
-    save_watermark(state)   
+    print(
+        f"{len(final_df)} store sales berhasil diproses"
+    )
+```

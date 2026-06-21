@@ -1,5 +1,5 @@
 {
-  "sales_modified_date": "1900-01-01T00:00:00",
-  "review_created_at": "1900-01-01T00:00:00",
-  "excel_last_file": ""
+    "sales_online": "1900-01-01T00:00:00+00:00",
+    "store_excel": "1900-01-01T00:00:00+00:00",
+    "reviews": "1900-01-01T00:00:00+00:00"
 }
