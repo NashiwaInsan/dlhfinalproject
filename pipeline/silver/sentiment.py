@@ -1,4 +1,3 @@
-```python
 import pandas as pd
 from pathlib import Path
 
@@ -101,4 +100,4 @@ def sentiment_reviews():
             ]
         ].head()
     )
-```
+

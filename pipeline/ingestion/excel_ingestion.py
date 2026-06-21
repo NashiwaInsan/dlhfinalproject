@@ -86,4 +86,3 @@ def ingest_store_sales():
     print(
         f"{len(final_df)} store sales berhasil diproses"
     )
-```

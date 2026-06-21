@@ -1,4 +1,3 @@
-```python
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
@@ -134,4 +133,3 @@ def ingest_online_sales():
 if __name__ == "__main__":
 
     ingest_online_sales()
-```
