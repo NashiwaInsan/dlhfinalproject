@@ -1,7 +1,7 @@
 # AdventureWorks Data Lakehouse
 
-Proyek Final Data Lakehouse untuk **AdventureWorks** (perusahaan manufaktur &
-distributor sepeda). Tujuannya menyatukan data yang tadinya terpisah-pisah
+Proyek Data Lakehouse untuk **AdventureWorks**, perusahaan manufaktur dan
+distributor sepeda. Proyek ini menyatukan data yang awalnya terpisah-pisah
 (silo) dari tiga kanal berbeda ke dalam satu gudang data analitik, lalu
 menyajikannya sebagai dashboard Business Intelligence.
 
@@ -9,16 +9,36 @@ menyajikannya sebagai dashboard Business Intelligence.
 
 ## Apa ini?
 
-Sistem mengintegrasikan **tiga sumber data** yang formatnya berbeda-beda:
+Sistem ini mengintegrasikan **tiga sumber data** yang formatnya berbeda-beda:
 
 1. **Penjualan online** — database transaksional SQL Server (`AdventureWorks2025`)
 2. **Penjualan toko fisik** — file Excel harian (disimulasikan)
 3. **Ulasan pelanggan** — REST API marketplace, disimpan di PostgreSQL (disimulasikan)
 
-Data ditarik lewat pipeline ETL Python, diproses bertahap dengan **Medallion
-Architecture** (Bronze → Silver → Gold) berformat Parquet, dimuat ke gudang data
-**DuckDB** (Star Schema), lalu divisualisasikan di **Power BI**. Ulasan dianalisis
-sentimennya menggunakan **NLTK VADER**.
+Ketiga sumber data tersebut tadinya tidak saling terhubung, baik dari sisi
+teknologi penyimpanan maupun format datanya. Proyek ini membangun pipeline
+yang menarik, membersihkan, dan menggabungkan ketiganya, sehingga performa
+penjualan dan persepsi pelanggan terhadap produk bisa dianalisis dalam satu
+tempat yang sama.
+
+---
+
+## Anggota & Jobdesk
+
+| Anggota | Jobdesk |
+|---------|---------|
+| Anggota 1 | Infrastruktur Docker, restore database, faker (generator data) |
+| Anggota 2 | Ingestion (incremental/watermark) + Silver Layer (cleaning & sentimen) |
+| Anggota 3 | Gold Layer (Star Schema) + load DuckDB + dashboard Power BI |
+
+---
+
+## Cara Kerjanya
+
+Data ditarik lewat pipeline ETL berbasis Python, diproses bertahap dengan
+**Medallion Architecture** (Bronze → Silver → Gold) berformat Parquet, dimuat
+ke gudang data **DuckDB** (Star Schema), lalu divisualisasikan di **Power BI**.
+Ulasan pelanggan dianalisis sentimennya menggunakan **NLTK VADER**.
 
 ### Alur singkat
 ```
@@ -34,66 +54,164 @@ sentimennya menggunakan **NLTK VADER**.
              Power BI
 ```
 
+Secara bertahap, alur kerjanya seperti ini:
+
+1. **Ingestion (→ Bronze).** Setiap sumber data ditarik secara inkremental
+   menggunakan mekanisme watermark, yaitu penanda waktu terakhir kali data
+   diambil. Hanya data baru atau yang berubah sejak watermark terakhir yang
+   diambil, lalu disimpan mentah (tanpa diubah) ke `lake/bronze/` sebagai
+   Parquet. Watermark tiap sumber dicatat di `pipeline/state/watermark.json`.
+
+2. **Silver (bersih & validasi).** Data Bronze dibersihkan: deduplikasi,
+   penanganan nilai kosong, dan standarisasi tipe data. Aturan bisnis yang
+   diterapkan adalah transaksi valid jika `Quantity > 0` dan `UnitPrice > 0`,
+   serta rating ulasan harus berada pada rentang 1 sampai 5. Baris yang gagal
+   validasi dipindahkan ke `lake/quarantine/` (tidak dihapus), sedangkan
+   yang valid disimpan ke `lake/silver/`. Di tahap ini juga dijalankan
+   analisis sentimen NLTK VADER pada teks ulasan, menghasilkan kolom
+   `SentimentLabel` (POSITIVE/NEUTRAL/NEGATIVE) dan `SentimentConfidence`.
+
+3. **Gold (Star Schema).** Data Silver dimodelkan menjadi skema bintang yang
+   terdiri dari tabel dimensi (`dim_date`, `dim_product`, `dim_customer`) dan
+   tabel fakta (`fact_sales`, `fact_reviews`), ditambah satu data mart agregat
+   (`mart_sentiment`). Pada tahap ini juga dihitung metrik `Revenue`, `Cost`,
+   dan `Profit`. Hasilnya disimpan ke `lake/gold/` sebagai Parquet.
+
+4. **Data Warehouse & Visualisasi.** Seluruh tabel Gold dimuat ke dalam
+   database **DuckDB** (`warehouse/datalake.duckdb`), lalu diakses oleh
+   **Power BI Desktop** melalui koneksi ODBC dengan mode `read_only`, untuk
+   ditampilkan sebagai dashboard interaktif (revenue/profit per kategori,
+   tren per tahun, distribusi sentimen, dan korelasi rating dengan profit).
+
 ### Tech stack
 Python (pandas, pyarrow) · NLTK VADER · Parquet · FastAPI · Docker Compose ·
 DuckDB · Power BI Desktop
 
 ---
 
-## Pembagian tugas & status
+## Struktur Direktori
 
-| Anggota | Fokus | Status |
-|--------|-------|--------|
-| **Anggota 1** | Infrastruktur Docker, restore database, faker (generator data) | ✅ Selesai |
-| **Anggota 2** | Ingestion (incremental/watermark) + Silver Layer (cleaning) | ✅ Selesai|
-| **Anggota 3** | Gold Layer (Star Schema) + load DuckDB + Power BI | ✅ Selesai |
+```
+.
+├── config/                     # Konfigurasi koneksi (SQL Server, Postgres, path, dst.)
+│   └── settings.py
+│
+├── docker/                     # Definisi infrastruktur sumber data
+│   ├── docker-compose.yml      # SQL Server, Postgres, pgAdmin, Marketplace API
+│   ├── postgres/init.sql       # Skema awal tabel reviews
+│   └── sqlserver/               # Skrip restore database & tabel stream
+│       ├── restore.sh
+│       └── online_stream.sql
+│
+├── marketplace_api/            # REST API (FastAPI) penerima ulasan pelanggan
+│   ├── main.py
+│   └── Dockerfile
+│
+├── fakers/                     # Generator data simulasi (faker)
+│   ├── faker_sales_online.py       # simulasi transaksi online baru
+│   ├── faker_store_excel.py        # simulasi file Excel toko fisik
+│   ├── faker_marketplace_reviews.py # simulasi ulasan pelanggan
+│   └── _sources.py                 # helper ambil ProductID/CustomerID valid
+│
+├── pipeline/                   # Inti pipeline ETL
+│   ├── runner.py                # orkestrator: jalankan semua tahap berurutan
+│   ├── state_manager.py         # baca/tulis watermark
+│   ├── state/
+│   │   └── watermark.json       # timestamp terakhir tiap sumber data
+│   ├── ingestion/                # tahap Bronze (extract per sumber)
+│   │   ├── sql_ingestion.py
+│   │   ├── excel_ingestion.py
+│   │   └── api_ingestion.py
+│   ├── silver/                   # tahap pembersihan & sentimen
+│   │   ├── cleaning.py
+│   │   └── sentiment.py
+│   └── gold/                     # tahap pemodelan Star Schema
+│       └── star_schema_builder.py
+│
+├── lake/                       # Data lake fisik (hasil pipeline)
+│   ├── bronze/                  # data mentah per sumber (online_sales, store_sales, reviews)
+│   ├── silver/                  # data bersih & terstandarisasi
+│   ├── gold/                    # tabel dimensi & fakta siap pakai (Parquet)
+│   └── quarantine/              # baris yang gagal validasi, untuk audit
+│
+├── watched/excel/              # folder yang dipantau untuk file Excel toko fisik baru
+│
+├── sample_data/                 # contoh data berskala kecil untuk pengembangan
+│   ├── sample_dim_product.csv
+│   ├── sample_dim_customer.csv
+│   ├── sample_sales_online_historis.csv
+│   ├── sample_sales_online_stream.csv
+│   ├── sample_reviews.json
+│   └── excel/sales_*.xlsx
+│
+├── run_fakers.py                # entry point menjalankan satu/semua faker
+├── export_sample_data.py        # menarik sample dari data live ke sample_data/
+├── requirements.txt
+└── .env.example                 # contoh konfigurasi environment
+```
 
 ---
 
-## PENTING: Cara Kerja Tim (baca dulu sebelum mulai!)
+## Kontrak Data (struktur tiap sumber)
 
-**Anggota 2 & 3 TIDAK PERLU install Docker atau menjalankan faker.** Infrastruktur
-dan data sudah hidup di laptop Anggota 1. Supaya kalian tetap bisa menulis dan
-menguji kode tanpa setup berat, Anggota 1 sudah meng-*export* contoh data ke
-folder `sample_data/` (sudah ikut di-commit ke repo ini, tinggal pakai langsung).
+### Sumber 1 — Penjualan Online
+- SQL Server `localhost:1433`, database `AdventureWorks2025`
+  - Historis: `Sales.SalesOrderHeader` + `Sales.SalesOrderDetail` (filter `ModifiedDate`)
+  - Data baru dari faker: tabel `dbo.OnlineOrderStream`
+    (kolom: `OrderStreamID, OrderDate, CustomerID, ProductID, OrderQty, UnitPrice, Channel, ModifiedDate`)
+  - Master: `Production.Product` (`StandardCost`, `ListPrice`), `Sales.Customer`
 
-Alur kerjanya:
-1. Anggota 2 & 3 `git clone` repo ini, lalu **kembangkan & uji kode** memakai
-   file-file di `sample_data/` (CSV/JSON kecil, struktur kolomnya identik
-   dengan data asli).
-2. Setelah kode jalan dengan baik di sample data, `git push` ke repo ini.
-3. Anggota 1 `git pull`, lalu menjalankan kode tersebut **di laptopnya**
-   (Laptop Utama) di atas data lengkap & live (Docker, SQL Server, dst).
-4. Hasil akhir (DuckDB + dashboard Power BI) dihasilkan dari proses nomor 3 ini.
+### Sumber 2 — Toko Fisik (Excel)
+- Folder `watched/excel/*.xlsx`
+- Kolom: `SalespersonID, StoreID, ProductID, QtySold, UnitPrice, SaleDate, Region`
 
-> Kalau ada bug yang hanya muncul di data lengkap (bukan di sample), kalian
-> berkumpul sebentar di Laptop Utama untuk debug bersama — ini bagian
-> "Fase Integrasi" yang sudah direncanakan dari awal.
+### Sumber 3 — Ulasan Pelanggan
+- `GET http://localhost:8000/reviews/latest?since=<ISO timestamp>`
+- Field: `review_id, product_id, customer_id, rating, review_text, language, is_verified, review_date, created_at`
 
-### Isi folder `sample_data/`
+### Watermark
+Timestamp terakhir tiap sumber disimpan di `pipeline/state/watermark.json`:
+```json
+{
+  "sales_online": "2026-06-21T05:00:00+00:00",
+  "store_excel":  "2026-06-21T05:00:00+00:00",
+  "reviews":      "2026-06-21T05:00:00+00:00"
+}
 ```
-sample_data/
-├── sample_dim_product.csv          # ~200 baris produk
-├── sample_dim_customer.csv         # ~200 baris pelanggan
-├── sample_sales_online_historis.csv  # contoh transaksi online 2011-2014
-├── sample_sales_online_stream.csv  # transaksi baru dari faker
-├── sample_reviews.json             # ulasan dari marketplace API
-└── excel/
-    └── sales_*.xlsx                # contoh file toko fisik
-```
-Struktur kolom di sample ini **sama persis** dengan data asli — hanya jumlah
-barisnya lebih sedikit. Kode yang kalian tulis untuk sample ini akan jalan
-tanpa ubah apa pun saat dipindah ke data lengkap.
 
 ---
 
-## Cara menjalankan infrastruktur (hanya untuk Anggota 1 / Laptop Utama)
+## Beberapa Keputusan Desain
 
-> Detail lengkap + troubleshooting ada di **PANDUAN_ANGGOTA1.md**.
+### `Channel` di `fact_sales`
+- Data dari SQL Server (`Sales.SalesOrderHeader`/`OnlineOrderStream`) → `'Online'`
+- Data dari Excel toko fisik → `'Store'` (bukan `'Offline'`), agar konsisten
+  dengan empat nilai kanal standar (`Online, Partner, Reseller, Store`) yang
+  dipakai pada laporan referensi proyek ini.
+
+### Format `SaleID`
+Karena Excel tidak punya ID transaksi bawaan, `fact_sales.SaleID` dibentuk
+sebagai surrogate key string per sumber, dijamin unik dan idempoten (tidak
+berubah meski pipeline dijalankan ulang):
+
+| Sumber | Format | Contoh |
+|--------|--------|--------|
+| Online historis | `ON-{SalesOrderID}-{ProductID}` | `ON-71774-708` |
+| Online stream (faker) | `ON-STREAM-{OrderStreamID}` | `ON-STREAM-42` |
+| Toko fisik (Excel) | `OFF-{NamaFileExcelTanpaExtensi}-{NomorBarisDalamFile}` | `OFF-sales_20260621_121139-7` |
+
+### Cost & Profit
+`Profit = Revenue - Cost`. Nilai `Cost` diambil dari `StandardCost` produk.
+Jika tidak tersedia (umumnya pada transaksi Excel yang produknya tidak
+tercatat di master), digunakan biaya standar default `UnitPrice * 0.6`.
+
+---
+
+## Cara Menjalankan
 
 **Prasyarat:** Docker Desktop, Python 3.11+, file `AdventureWorks2025.bak`
 (unduh dari [SQL Server samples Microsoft](https://github.com/Microsoft/sql-server-samples/releases/tag/adventureworks),
-versi OLTP penuh — **bukan** LT/DW).
+versi OLTP penuh, bukan LT/DW).
 
 ```bash
 # 1. Siapkan environment
@@ -106,151 +224,27 @@ cp ../.env.example .env
 docker compose up -d
 docker compose logs -f sqlserver_init    # tunggu "INIT SELESAI"
 
-# 4. Jalankan faker (mengisi data toko fisik & ulasan)
+# 4. Jalankan faker (mengisi data toko fisik & ulasan secara berkala)
 cd ..
 cp .env.example .env
 pip install -r requirements.txt
 python run_fakers.py --sources all --duration 1
 
-# 5. (Opsional) Perbarui sample_data/ untuk dibagikan ke tim
-python export_sample_data.py
-git add sample_data/
-git commit -m "Update sample data"
-git push
+# 5. Jalankan pipeline ETL (Bronze -> Silver -> Gold)
+python -m pipeline.runner
 ```
-
----
-
-## Kontrak Data (struktur tiap sumber)
-
-### Sumber 1 — Penjualan Online
-- **Sample (untuk dev):** `sample_data/sample_sales_online_historis.csv` +
-  `sample_data/sample_sales_online_stream.csv`
-- **Data asli (di Laptop Utama):** SQL Server `localhost:1433`, DB `AdventureWorks2025`
-  - Historis: `Sales.SalesOrderHeader` + `Sales.SalesOrderDetail` (filter `ModifiedDate`)
-  - Baru dari faker: tabel `dbo.OnlineOrderStream`
-    (kolom: `OrderStreamID, OrderDate, CustomerID, ProductID, OrderQty, UnitPrice, Channel, ModifiedDate`)
-  - Master: `Production.Product` (`StandardCost`, `ListPrice`), `Sales.Customer`
-
-### Sumber 2 — Toko Fisik (Excel)
-- **Sample:** `sample_data/excel/*.xlsx`
-- **Data asli:** folder `watched/excel/*.xlsx` di Laptop Utama
-- Kolom: `SalespersonID, StoreID, ProductID, QtySold, UnitPrice, SaleDate, Region`
-
-### Sumber 3 — Ulasan Pelanggan
-- **Sample:** `sample_data/sample_reviews.json`
-- **Data asli:** `GET http://localhost:8000/reviews/latest?since=<ISO timestamp>`
-- Field: `review_id, product_id, customer_id, rating, review_text, language, is_verified, review_date, created_at`
-
-### Watermark
-Simpan timestamp terakhir tiap sumber di `state/watermark.json`:
-```json
-{
-  "sales_online": "2026-06-21T05:00:00+00:00",
-  "store_excel":  "2026-06-21T05:00:00+00:00",
-  "reviews":      "2026-06-21T05:00:00+00:00"
-}
-```
-
----
-
-## Keputusan Desain (FAQ dari tim)
-
-Beberapa hal yang tidak eksplisit di data mentah, sudah diputuskan begini
-supaya konsisten antar-anggota:
-
-### `Channel` di `fact_sales`
-- Data dari SQL Server (`Sales.SalesOrderHeader`/`OnlineOrderStream`) → `'Online'`
-- Data dari Excel toko fisik → **`'Store'`** (bukan `'Offline'`).
-  Alasan: konsisten dengan 4 nilai kanal standar (`Online, Partner, Reseller,
-  Store`) yang dipakai di laporan referensi proyek ini.
-
-### Format `SaleID` (Excel tidak punya ID transaksi)
-`fact_sales.SaleID` adalah surrogate key string gabungan, dibentuk per sumber
-agar dijamin unik dan tidak berubah kalau pipeline di-run ulang (idempoten):
-
-| Sumber | Format | Contoh |
-|--------|--------|--------|
-| Online historis | `ON-{SalesOrderID}-{ProductID}` | `ON-71774-708` |
-| Online stream (faker) | `ON-STREAM-{OrderStreamID}` | `ON-STREAM-42` |
-| Toko fisik (Excel) | `OFF-{NamaFileExcelTanpaExtensi}-{NomorBarisDalamFile}` | `OFF-sales_20260621_121139-7` |
-
-Kenapa pakai nama file Excel (bukan SaleDate/StoreID) untuk bagian Excel:
-nama filenya sudah mengandung timestamp unik per batch (`sales_YYYYMMDD_HHMMSS.xlsx`),
-jadi gabungan nama file + nomor baris pasti unik lintas semua file, walau ada
-baris dengan SaleDate/StoreID/SalespersonID yang sama persis di file berbeda.
-
-```python
-# contoh kode pembentuk SaleID untuk baris dari Excel
-sale_id = f"OFF-{os.path.splitext(filename)[0]}-{row_index}"
-```
-
----
-
-
-
-### Anggota 2 — Ingestion + Silver Layer
-Buat folder `pipeline/ingestion/` dan `pipeline/silver/`. Tugas:
-
-1. **Ingestion (→ Bronze):**
-   - Baca delta dari 3 sumber pakai watermark (`state/watermark.json`).
-   - Untuk dev: baca dari `sample_data/`. Untuk run asli: baca dari SQL Server/
-     folder Excel/API langsung (ganti sumber baca saja, logikanya sama).
-   - Simpan mentah (tanpa diubah) ke `lake/bronze/<sumber>/` sebagai Parquet.
-   - Update `state/watermark.json` setelah sukses.
-
-2. **Silver (bersih & validasi):**
-   - Baca Bronze, lakukan: deduplikasi, null-handling, standarisasi tipe data.
-   - Aturan bisnis: transaksi valid jika `Quantity > 0` dan `UnitPrice > 0`;
-     rating ulasan harus 1–5.
-   - Baris yang gagal validasi → pindahkan ke `lake/quarantine/` (jangan dihapus).
-   - Hasil bersih → simpan ke `lake/silver/`.
-
-3. **Sentimen:** jalankan NLTK VADER (`SentimentIntensityAnalyzer`) pada kolom
-   `review_text` di tahap Silver ulasan → hasilkan kolom `SentimentLabel`
-   (POSITIVE/NEUTRAL/NEGATIVE) dan `SentimentConfidence`.
-
-### Anggota 3 — Gold Layer + DuckDB + Power BI
-Buat folder `pipeline/gold/`. Tugas:
-
-1. **Gold (Star Schema):** dari Silver, bentuk tabel:
-   - `dim_date` (DateKey YYYYMMDD, Date, Week, Month, Quarter, Year)
-   - `dim_product` (ProductID, ProductName, ProductNumber, Color, Size, StandardCost, ListPrice, kategori)
-   - `dim_customer` (CustomerID, FullName, CustomerType)
-   - `fact_sales` (SaleID, FK ke semua dimensi, Quantity, Revenue, Cost, Profit, Channel)
-   - `fact_reviews` (ReviewID, FK dimensi, RatingScore, SentimentLabel, SentimentConfidence)
-   - `mart_sentiment` (agregat per produk: AvgRating, PosCount, NeutCount, NegCount, TotalReviews)
-   - Hitung `Profit = Revenue - Cost`. Cost dari `StandardCost`; jika tidak ada
-     (transaksi Excel), pakai default `UnitPrice * 0.6`.
-   - Simpan semua tabel ke `lake/gold/` sebagai Parquet.
-
-2. **Load DuckDB:** buat `warehouse/datalake.duckdb`, muat semua tabel Gold:
-   ```sql
-   CREATE TABLE fact_sales AS SELECT * FROM read_parquet('lake/gold/fact_sales*.parquet');
-   ```
-
-3. **Power BI:**
-   - Pasang DuckDB ODBC Driver, buat DSN ke `warehouse/datalake.duckdb`
-     dengan `access_mode=read_only`.
-   - Bentuk relasi Star Schema (filter satu arah, dimensi → fakta).
-   - Buat measure DAX: `Total Revenue`, `Total Cost`, `Total Profit`,
-     `Profit Margin %`, `Total Sales Count`.
-   - Susun visual: bar chart revenue/profit per kategori, trend per tahun,
-     donut chart sentimen, scatter plot rating vs profit.
-
----
 
 ## Final Deliverables
 
 - `warehouse/datalake.duckdb`
 - `AdventureWorks_Dashboard.pbix`
 
-## Kredensial default (development lokal, di Laptop Utama)
+## Kredensial Default (development lokal)
 - SQL Server: user `sa`, password di `.env` (`MSSQL_PASSWORD`), DB `AdventureWorks2025`
 - PostgreSQL: `mkuser` / `mkpass123`, DB `marketplace_db`
 - Marketplace API: `http://localhost:8000`
 
 ## Catatan
 File `.bak`, `.env`, dan data lake/warehouse penuh **tidak** disimpan di Git
-(lihat `.gitignore`) — hanya `sample_data/` yang sengaja dikecualikan supaya
-tim bisa develop tanpa setup berat.
+(lihat `.gitignore`), hanya `sample_data/` yang sengaja dikecualikan supaya
+proyek ini bisa dijalankan ulang dan dikembangkan tanpa setup berat.
