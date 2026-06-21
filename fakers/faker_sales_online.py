@@ -43,8 +43,8 @@ def _insert_order():
     print(f"[sales_online] order cust={customer_id} prod={product_id} qty={qty}")
 
 
-def run(stop_event=None, duration_hours=72):
-    deadline = time.time() + duration_hours * 3600
+def run(stop_event=None, duration_hours=None):
+    deadline = float("inf") if duration_hours is None else time.time() + duration_hours * 3600
     while time.time() < deadline and (stop_event is None or not stop_event.is_set()):
         try:
             _insert_order()
