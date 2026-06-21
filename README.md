@@ -154,7 +154,40 @@ Simpan timestamp terakhir tiap sumber di `state/watermark.json`:
 
 ---
 
-## Tugas yang Tersisa
+## Keputusan Desain (FAQ dari tim)
+
+Beberapa hal yang tidak eksplisit di data mentah, sudah diputuskan begini
+supaya konsisten antar-anggota:
+
+### `Channel` di `fact_sales`
+- Data dari SQL Server (`Sales.SalesOrderHeader`/`OnlineOrderStream`) → `'Online'`
+- Data dari Excel toko fisik → **`'Store'`** (bukan `'Offline'`).
+  Alasan: konsisten dengan 4 nilai kanal standar (`Online, Partner, Reseller,
+  Store`) yang dipakai di laporan referensi proyek ini.
+
+### Format `SaleID` (Excel tidak punya ID transaksi)
+`fact_sales.SaleID` adalah surrogate key string gabungan, dibentuk per sumber
+agar dijamin unik dan tidak berubah kalau pipeline di-run ulang (idempoten):
+
+| Sumber | Format | Contoh |
+|--------|--------|--------|
+| Online historis | `ON-{SalesOrderID}-{ProductID}` | `ON-71774-708` |
+| Online stream (faker) | `ON-STREAM-{OrderStreamID}` | `ON-STREAM-42` |
+| Toko fisik (Excel) | `OFF-{NamaFileExcelTanpaExtensi}-{NomorBarisDalamFile}` | `OFF-sales_20260621_121139-7` |
+
+Kenapa pakai nama file Excel (bukan SaleDate/StoreID) untuk bagian Excel:
+nama filenya sudah mengandung timestamp unik per batch (`sales_YYYYMMDD_HHMMSS.xlsx`),
+jadi gabungan nama file + nomor baris pasti unik lintas semua file, walau ada
+baris dengan SaleDate/StoreID/SalespersonID yang sama persis di file berbeda.
+
+```python
+# contoh kode pembentuk SaleID untuk baris dari Excel
+sale_id = f"OFF-{os.path.splitext(filename)[0]}-{row_index}"
+```
+
+---
+
+
 
 ### Anggota 2 — Ingestion + Silver Layer
 Buat folder `pipeline/ingestion/` dan `pipeline/silver/`. Tugas:

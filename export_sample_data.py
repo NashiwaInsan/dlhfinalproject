@@ -37,8 +37,15 @@ def export_master_data():
     print(f"[ok] sample_dim_product.csv ({len(products)} baris)")
 
     customers = pd.read_sql(
-        """SELECT TOP 200 CustomerID, PersonID, StoreID, TerritoryID
-           FROM Sales.Customer""", conn)
+        """SELECT TOP 200
+                  c.CustomerID, c.PersonID, c.StoreID, c.TerritoryID,
+                  CASE WHEN p.BusinessEntityID IS NOT NULL
+                       THEN LTRIM(RTRIM(CONCAT(p.FirstName, ' ', p.LastName)))
+                       ELSE NULL END AS FullName,
+                  CASE WHEN c.StoreID IS NOT NULL THEN 'Store'
+                       ELSE 'Individual' END AS CustomerType
+           FROM Sales.Customer c
+           LEFT JOIN Person.Person p ON c.PersonID = p.BusinessEntityID""", conn)
     customers.to_csv(f"{OUT_DIR}/sample_dim_customer.csv", index=False)
     print(f"[ok] sample_dim_customer.csv ({len(customers)} baris)")
 
