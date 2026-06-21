@@ -1,4 +1,3 @@
-```python
 from pipeline.ingestion.sql_ingestion import (
     ingest_online_sales
 )
@@ -60,4 +59,3 @@ def run():
 
 if __name__ == "__main__":
     run()
-```
