@@ -45,7 +45,7 @@ DuckDB · Power BI Desktop
 | Anggota | Fokus | Status |
 |--------|-------|--------|
 | **Anggota 1** | Infrastruktur Docker, restore database, faker (generator data) | ✅ Selesai |
-| **Anggota 2** | Ingestion (incremental/watermark) + Silver Layer (cleaning) | ⬜ Belum |
+| **Anggota 2** | Ingestion (incremental/watermark) + Silver Layer (cleaning) | ✅ Selesai|
 | **Anggota 3** | Gold Layer (Star Schema) + load DuckDB + Power BI | ⬜ Belum |
 
 ---
