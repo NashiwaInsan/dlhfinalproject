@@ -46,7 +46,7 @@ DuckDB · Power BI Desktop
 |--------|-------|--------|
 | **Anggota 1** | Infrastruktur Docker, restore database, faker (generator data) | ✅ Selesai |
 | **Anggota 2** | Ingestion (incremental/watermark) + Silver Layer (cleaning) | ✅ Selesai|
-| **Anggota 3** | Gold Layer (Star Schema) + load DuckDB + Power BI | ⬜ Belum |
+| **Anggota 3** | Gold Layer (Star Schema) + load DuckDB + Power BI | ✅ Selesai |
 
 ---
 
@@ -239,6 +239,11 @@ Buat folder `pipeline/gold/`. Tugas:
      donut chart sentimen, scatter plot rating vs profit.
 
 ---
+
+## Final Deliverables
+
+- `warehouse/datalake.duckdb`
+- `AdventureWorks_Dashboard.pbix`
 
 ## Kredensial default (development lokal, di Laptop Utama)
 - SQL Server: user `sa`, password di `.env` (`MSSQL_PASSWORD`), DB `AdventureWorks2025`
